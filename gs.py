@@ -2,26 +2,20 @@
 
 from bs4 import BeautifulSoup
 import string
+import time
 import urllib2
 import random
 import sqlite3 as lite
 import sqlite3
 
-def get_source(uri):
+def get_source(url):
     """gets the source"""
 
-    url = "https://ghostbin.com/paste/qecxy"
     try:
         response = urllib2.urlopen(url)
         source = response.read()
         response.close()
         return source
-    except urllib2.HTTPError, e:
-        return False
-    except urllib2.URLError, e:
-        return False
-    except httplib.HTTPException, e:
-        return False
     except Exception, e:
         return False
         
@@ -42,43 +36,32 @@ def parse(source):
 
     return title, paste
 
-def archive(url, paste, interesting):
+def archive(link):
     """Will store all links and if it is 'interesting' then it will store the paste"""
    
-    
     database = "ghostdb.db"
-
-    if interesting == True:
-        interesting = 1
-    else:
-        interesting = 0
 
     con = lite.connect(database)
   
     cur = con.cursor()
 
     cur.execute(
-             'CREATE TABLE IF NOT EXISTS ghostbin( date_added TEXT, link TEXT PRIMARY KEY NOT NULL, scraped BOOLEAN NOT NULL, interesting BOOLEAN NOT NULL, paste TEXT)')
+             'CREATE TABLE IF NOT EXISTS ghostbin( date_added TEXT, link TEXT PRIMARY KEY NOT NULL, interesting BOOLEAN NOT NULL, paste TEXT)')
     
-    scraped = 1
+    interesting = 0
 
-    
     # Insert the link into the database
     cur.execute(
-        "INSERT INTO ghostbin(link,scraped,interesting) VALUES( ?, ?, ? );", (url, scraped, interesting))
+        "INSERT INTO ghostbin(link, interesting) VALUES( ?, ?);", (link, interesting))
     cur.execute(
-        "UPDATE ghostbin SET date_added = date('now') WHERE link == (?);", (url,))
+        "UPDATE ghostbin SET date_added = date('now') WHERE link == (?);", (link,))
 
-    if interesting == True:
-        cur.execute(
-            "UPDATE ghostbin SET paste = (?) WHERE link == (?);", (paste, url))
-        
     con.commit()
 
     if con:
         con.close()
 
-    print url + " has been added to the database."
+    print link + " has been added to the database."
 
 
 def checkdups(link):
@@ -90,6 +73,9 @@ def checkdups(link):
         
         cur = con.cursor()
 
+        cur.execute(
+             'CREATE TABLE IF NOT EXISTS ghostbin( date_added TEXT, link TEXT PRIMARY KEY NOT NULL, interesting BOOLEAN NOT NULL, paste TEXT)')
+   
         cur.execute("SELECT date_added FROM ghostbin WHERE link = ?", (link,))
         data=cur.fetchone()
 
@@ -98,7 +84,7 @@ def checkdups(link):
             return False
         else:
             return True
-    
+
     finally:
         if con:
             cur.close()
@@ -110,42 +96,63 @@ def genUri():
     link = "https://ghostbin.com/paste/" + uri
     return link
 
+def addPaste(link, paste):
+    database = "ghostdb.db"
+    try:
+        con = lite.connect(database)
+        
+        cur = con.cursor()
+
+        cur.execute(
+                "UPDATE ghostbin SET paste = (?)  WHERE link == (?);", (paste, link))
+
+        cur.execute(
+                "UPDATE ghostbin SET interesting = 1 WHERE link == (?);", (link,))
+        
+        con.commit()
+
+    except Exception, e:
+        "Could not ipdate the db"
+
+    finally:
+        if con:
+            con.close()
+
+    print "paste added"
+
 def main():
     """Main function"""
-    print "hello world"
 
-    #Generate a link
-    link = genUri()
-    link = "https://ghostbin.com/paste/qecxy"
-    print link
-    
-    #Check if it was already used
-    dup = checkdups(link)
-    if dup == True:
-        print "Duplicate found, skipping"
-        #continue
-        exit()
+    while True:
+        #Generate a link
+        link = genUri()
+        #link = "https://ghostbin.com/paste/qecxy"
+        #print link
+        
+        #Check if it was already used
+        dup = checkdups(link)
+        if dup == True:
+            print "Duplicate found, skipping"
+            continue
+            #exit()
+        else:
+            archive(link)
+       
+        #Get the source code
+        source = get_source(link)
+        if source == False: #This means the link was bad
+            time.sleep(10)
+            continue 
+            #exit()
+        #print source
    
-    #Get the source code
-    source = get_source(link)
-    if source == False: #This means the link was bad
-        print "nope. Must be blocked. :/"
-        #continue 
-        exit()
-    #print source
-   
-    #Get the paste
-    title, paste = parse(source)
+        #Get the paste
+        title, paste = parse(source)
 
-    print paste
-
-    #Find good shit
-    #have to create this yet
-    
-
-    #Archive the link so we don't use it again
-    interesting = False
-    archive(link, paste, interesting)
+        addPaste(link, paste)
+        #Find good shit
+        #have to create this yet
+        time.sleep(10)
 
     print "end :)"
 
