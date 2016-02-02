@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import string
 import time
 import urllib2
+import requests
 import random
 import sqlite3 as lite
 import sqlite3
@@ -12,11 +13,19 @@ def get_source(url):
     """gets the source"""
 
     try:
+        #response = requests.get(url,
+        #        proxies={"https": "https://104.28.17.114:443"})
         response = urllib2.urlopen(url)
         source = response.read()
+        source = response.text
         response.close()
         return source
+    except urllib2.HTTPError, err:
+        if err.code == 420:
+            print "being rate limited. Take a break"
+            exit()
     except Exception, e:
+        print e
         return False
         
 
